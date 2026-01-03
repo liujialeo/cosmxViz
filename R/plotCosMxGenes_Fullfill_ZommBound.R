@@ -19,20 +19,20 @@ plotCosMxGenes <- function(
     colors = NULL,
     
     # ---- cell type overlay ----
-    celltype_df = NULL,                 # data.frame with fov + cellID (or cell_ID) + cell type column
-    celltype_col = "cell_type",          # column name in celltype_df storing cell type
-    celltype_palette = NULL,             # named vector: names=cell types, values=colors (RECOMMENDED)
-    celltype_alpha_full = 0.35,          # FULL: fill alpha
-    celltype_alpha_zoom = 1,             # ZOOM: (outline mode, not used; keep for compatibility)
-    show_celltype_legend_full = TRUE,    # show legend on FULL
-    show_celltype_legend_zoom = FALSE,   # show legend on ZOOM (usually FALSE to avoid duplication)
+    celltype_df = NULL,
+    celltype_col = "cell_type",
+    celltype_palette = NULL,
+    celltype_alpha_full = 0.35,
+    celltype_alpha_zoom = 1,
+    show_celltype_legend_full = TRUE,
+    show_celltype_legend_zoom = FALSE,
     # ---------------------------
     
     # ---- which layers to show ----
-    show_genes_full = FALSE,             # FULL: show gene points? (you want FALSE)
-    show_genes_zoom = TRUE,              # ZOOM: show gene points? (you want TRUE)
-    full_celltype_mode = c("fill", "outline", "both"), # you want "fill"
-    zoom_celltype_mode = c("outline", "fill", "both"), # you want "outline"
+    show_genes_full = FALSE,
+    show_genes_zoom = TRUE,
+    full_celltype_mode = c("fill", "outline", "both"),
+    zoom_celltype_mode = c("outline", "fill", "both"),
     # -----------------------------
     
     zoom.x = NULL,
@@ -61,10 +61,14 @@ plotCosMxGenes <- function(
   if (!requireNamespace("ggplot2", quietly = TRUE)) stop("Please install ggplot2")
   if (!requireNamespace("rlang", quietly = TRUE)) stop("Please install rlang")
   
+  # NEW: require local make_scale_bar (put it in your package R/scale_bar.R)
+  if (!exists("make_scale_bar", mode = "function")) {
+    stop("Cannot find function `make_scale_bar()`. Please source scale_bar.R or include it in your package (R/scale_bar.R).")
+  }
+  
   full_celltype_mode <- match.arg(full_celltype_mode)
   zoom_celltype_mode <- match.arg(zoom_celltype_mode)
   
-  # Helper: detect which column name to use for cell id
   detect_cellid_col <- function(df) {
     if ("cellID" %in% colnames(df)) return("cellID")
     if ("cell_ID" %in% colnames(df)) return("cell_ID")
@@ -75,7 +79,6 @@ plotCosMxGenes <- function(
   if (is.null(colors)) colors <- grDevices::rainbow(length(genes))
   if (length(colors) != length(genes)) stop("Length of colors must match length of genes")
   
-  # Ensure required columns exist
   stopifnot(all(c("fov", "x_global_px", "y_global_px") %in% colnames(polygons)))
   stopifnot(all(c("x_global_px", "y_global_px") %in% colnames(tx)))
   
@@ -117,7 +120,6 @@ plotCosMxGenes <- function(
         celltype_palette_resolved <- NULL
       }
     } else {
-      # IMPORTANT: user-provided palette should be a NAMED vector
       if (is.null(names(celltype_palette)) || any(names(celltype_palette) == "")) {
         stop("celltype_palette must be a NAMED vector: c('TypeA'='#RRGGBB', 'TypeB'='#RRGGBB', ...)")
       }
@@ -136,13 +138,12 @@ plotCosMxGenes <- function(
       )
     }
   } else {
-    # If no celltype_df, standardize cell id for grouping if needed
     if (poly_cellid_col != "cellID") {
       polygons <- dplyr::rename(polygons, cellID = !!rlang::sym(poly_cellid_col))
     }
   }
   
-  # Filter transcripts for genes (CosMx tx file commonly uses 'target' for gene)
+  # Filter transcripts for genes
   if (!("target" %in% colnames(tx))) stop("tx must contain column: target (gene name)")
   tx.data_list <- lapply(genes, function(g) tx[tx$target == g, , drop = FALSE])
   names(tx.data_list) <- genes
@@ -165,13 +166,8 @@ plotCosMxGenes <- function(
   if (zoom.y.start + zoom.width.y > y_max) zoom.y.start <- y_max - zoom.width.y
   zoom.window <- c(zoom.x.start, zoom.x.start + zoom.width.x, zoom.y.start, zoom.y.start + zoom.width.y)
   
-  # Scale bars (requires sputilsR::make_scale_bar)
-  if (!exists("make_scale_bar", where = asNamespace("sputilsR"), inherits = FALSE) &&
-      !("make_scale_bar" %in% getNamespaceExports("sputilsR"))) {
-    stop("Cannot find sputilsR::make_scale_bar. Please ensure sputilsR is loaded and updated.")
-  }
-  
-  scale.bar.full <- sputilsR::make_scale_bar(
+  # Scale bars (NOW: local make_scale_bar)
+  scale.bar.full <- make_scale_bar(
     x_vals = polygons$x_global_px,
     y_vals = polygons$y_global_px,
     microns_per_pixel = microns_per_pixel,
@@ -180,7 +176,7 @@ plotCosMxGenes <- function(
   )
   
   # ------------------------
-  # FULL plot: celltype FILLED, no genes (per your request)
+  # FULL plot
   # ------------------------
   p_full <- ggplot2::ggplot()
   
@@ -238,7 +234,6 @@ plotCosMxGenes <- function(
         )
     }
   } else {
-    # fallback: draw polygons in grey
     p_full <- p_full +
       ggplot2::geom_polygon(
         data = polygons,
@@ -250,7 +245,6 @@ plotCosMxGenes <- function(
       )
   }
   
-  # IMPORTANT: genes in FULL only if requested
   if (isTRUE(show_genes_full)) {
     for (i in seq_along(genes)) {
       p_full <- p_full +
@@ -264,7 +258,6 @@ plotCosMxGenes <- function(
     }
   }
   
-  # Zoom rectangle on full plot
   if (isTRUE(show_zoom_rect)) {
     p_full <- p_full +
       ggplot2::annotate(
@@ -287,7 +280,7 @@ plotCosMxGenes <- function(
     ggplot2::scale_y_continuous(expand = c(0, 0))
   
   # ------------------------
-  # ZOOM plot: celltype OUTLINE + genes (per your request)
+  # ZOOM plot
   # ------------------------
   polygons_zoom <- polygons %>%
     dplyr::filter(
@@ -303,7 +296,7 @@ plotCosMxGenes <- function(
       )
   })
   
-  scale.bar.zoom <- sputilsR::make_scale_bar(
+  scale.bar.zoom <- make_scale_bar(
     x_vals = zoom.window[1:2],
     y_vals = zoom.window[3:4],
     microns_per_pixel = microns_per_pixel,
@@ -380,7 +373,6 @@ plotCosMxGenes <- function(
       )
   }
   
-  # Genes in ZOOM only if requested
   if (isTRUE(show_genes_zoom)) {
     for (i in seq_along(genes)) {
       p_zoom <- p_zoom +
