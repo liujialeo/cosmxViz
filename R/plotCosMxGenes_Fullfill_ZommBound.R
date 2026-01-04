@@ -167,7 +167,7 @@ plotCosMxGenes <- function(
   zoom.window <- c(zoom.x.start, zoom.x.start + zoom.width.x, zoom.y.start, zoom.y.start + zoom.width.y)
   
   # Scale bars (NOW: local make_scale_bar)
-  scale.bar.full <- make_scale_bar(
+  scale.bar.full <- cosmxViz::make_scale_bar(
     x_vals = polygons$x_global_px,
     y_vals = polygons$y_global_px,
     microns_per_pixel = microns_per_pixel,
@@ -296,7 +296,7 @@ plotCosMxGenes <- function(
       )
   })
   
-  scale.bar.zoom <- make_scale_bar(
+  scale.bar.zoom <- cosmxViz::make_scale_bar(
     x_vals = zoom.window[1:2],
     y_vals = zoom.window[3:4],
     microns_per_pixel = microns_per_pixel,
@@ -398,3 +398,4 @@ plotCosMxGenes <- function(
   
   return(list(full = p_full, zoom = p_zoom))
 }
+
